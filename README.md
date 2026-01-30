@@ -6,40 +6,47 @@ Web app sederhana untuk melacak sales project dengan Next.js 14 (App Router), Ta
 
 - **Auth**: Login dengan Supabase Auth
 - **Roles**: `admin` dan `sales` (disimpan di tabel `profiles`)
-- **Customers**: CRUD master customer (admin & sales)
-- **Projects**: Input project (customer, no quote, project name, value, progress type Budgetary/Tender, weekly update), list di dashboard dengan filter Progress Type
-- **Security**: Row Level Security (RLS) di Supabase; sales bisa input & edit milik sendiri, admin bisa edit semua
+- **Customers**: Master data customer + **Sector** (Data Center, Oil and Gas, Commercial, Industrial, Mining) + **PIC** (optional, multi: Nama, Email, No. HP, Jabatan); hanya sales/admin yang bisa add/edit/delete
+- **Projects**: Input project dengan Customer, No Quote, Project Name, Value, Progress Type (Budgetary / Tender / Win / Lose), Prospect (Hot Prospect / Normal), dan Project Update
+- **Project updates**: Riwayat update project tersimpan dan bisa dipantau
+- **Dashboard**: Metrik CRM (Total Value, Total Projects, Hot Lead → Win %, Win/Lose) berdasarkan filter + tabel project dengan filter Progress Type, Prospect, dan Sales
+- **Settings**: Ganti password + **Display Name** (nama yang tampil di Dashboard/Filter/header)
+- **RLS**: Row Level Security aktif; Sales lihat/input data sendiri, Admin bisa edit semua
 
 ## Setup
 
-### 1. Install dependencies
+### 1. Dependencies
 
 ```bash
 cd sales-tracker
 npm install
 ```
 
-### 2. Supabase
+### 2. Environment
 
-1. Buat project di [Supabase Dashboard](https://supabase.com/dashboard).
-2. Di **Project Settings > API** ambil:
-   - **Project URL** → `NEXT_PUBLIC_SUPABASE_URL`
-   - **anon public** key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-3. Di **SQL Editor**, jalankan script di `supabase/schema.sql` untuk membuat tabel `profiles`, `customers`, `projects` dan RLS.
-4. Di **Authentication > Users** buat user (atau pakai Sign Up). Untuk set role `admin`, setelah user dibuat bisa update manual di tabel `profiles` (role = 'admin').
-
-### 3. Environment
+Salin template env dan isi credential Supabase:
 
 ```bash
 cp .env.local.example .env.local
 ```
 
-Isi `.env.local`:
+Edit `.env.local`:
 
-```
-NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-```
+- `NEXT_PUBLIC_SUPABASE_URL`: URL project dari Supabase Dashboard → Settings → API
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Anon key dari halaman yang sama
+
+### 3. Database di Supabase
+
+Jalankan migration SQL di Supabase:
+
+1. Buka [Supabase Dashboard](https://supabase.com/dashboard) → pilih project
+2. **SQL Editor** → New query
+3. Jalankan migration SQL **berurutan** di SQL Editor:
+   - `001_initial_schema.sql`
+   - `002_fix_profiles_rls_recursion.sql` (perbaikan rekursi RLS)
+   - `003_customers_pics_sector_profiles_display.sql` (sector, PIC, display_name)
+
+Setelah itu tabel `profiles`, `customers`, `customer_pics`, `projects`, `project_updates` dan RLS terbentuk. User baru yang sign up lewat Auth akan dapat baris di `profiles` dengan role default `sales`. Untuk menjadikan user sebagai admin, update manual di tabel `profiles`: set `role = 'admin'`.
 
 ### 4. Jalankan dev server
 
@@ -47,46 +54,37 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 npm run dev
 ```
 
-Buka [http://localhost:3000](http://localhost:3000). Halaman utama akan redirect ke `/login` atau `/dashboard` jika sudah login.
+Buka [http://localhost:3000](http://localhost:3000). Sign in dengan user yang sudah didaftarkan di Supabase Auth (Authentication → Users).
 
-## Struktur Project
+## Struktur project
 
 ```
 sales-tracker/
-├── src/
-│   ├── app/
-│   │   ├── (dashboard)/     # Layout + auth check
-│   │   │   ├── dashboard/   # List project + filter
-│   │   │   ├── projects/
-│   │   │   │   ├── new/     # Form project baru
-│   │   │   │   └── [id]/edit/
-│   │   │   └── customers/   # CRUD customers
-│   │   ├── login/
-│   │   ├── layout.tsx
-│   │   ├── page.tsx        # Redirect ke login/dashboard
-│   │   └── globals.css
-│   ├── components/
-│   │   ├── DashboardNav.tsx
-│   │   ├── ProjectsTable.tsx
-│   │   ├── ProgressTypeFilter.tsx
-│   │   ├── ProjectForm.tsx
-│   │   ├── CustomersTable.tsx
-│   │   └── CustomerForm.tsx
-│   ├── lib/
-│   │   └── supabase/       # client, server, middleware
-│   ├── types/
-│   │   └── database.ts
-│   └── middleware.ts
+├── app/
+│   ├── dashboard/          # Layout + halaman setelah login
+│   │   ├── customers/       # Master customer
+│   │   ├── projects/        # List project, new, detail [id]
+│   │   └── page.tsx         # Dashboard (list project + filter)
+│   ├── login/               # Halaman login
+│   ├── globals.css
+│   ├── layout.tsx
+│   └── page.tsx             # Home (redirect ke dashboard jika sudah login)
+├── components/              # UI components
+├── lib/
+│   ├── supabase/            # Client, server, middleware
+│   └── types/               # Database types
 ├── supabase/
-│   └── schema.sql          # Tabel + RLS
-├── .env.local.example
-└── package.json
+│   └── migrations/          # SQL schema + RLS
+├── .env.local.example       # Template env
+├── package.json
+├── tailwind.config.ts
+└── README.md
 ```
 
-## Database (Supabase)
+## Tech stack
 
-- **profiles**: `id` (uuid, FK auth.users), `email`, `full_name`, `role` ('admin' | 'sales')
-- **customers**: `id`, `name`
-- **projects**: `id`, `created_at`, `no_quote`, `project_name`, `customer_id`, `value`, `status`, `progress_type` ('Budgetary' | 'Tender'), `weekly_update`, `created_by`
-
-RLS: lihat `supabase/schema.sql` untuk policy detail.
+- Next.js 14 (App Router)
+- Tailwind CSS
+- Lucide React
+- Supabase (Auth + Database + RLS)
+# sales-tracker-v2
